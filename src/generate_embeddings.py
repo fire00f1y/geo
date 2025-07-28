@@ -30,24 +30,19 @@ def generate_embeddings(output_path: str):
     edge_indices = graph.edge_index.cuda()
     ratings = graph.edge_attr[:, 0].cuda()
 
-    for n, p in gnn_model.named_parameters():
-        print(f"n={n}, mean={p.mean().item()}, std={p.std().item()}")
-
     with torch.no_grad():
         embeddings = gnn_model(node_features, edge_indices, ratings)
         print(f"Embeddings shape: {embeddings.shape}")
         print(f"Num users: {graph.num_users}, Num books: {graph.num_books}")
 
-        item_embeddings = embeddings[graph.num_users:]
-        print(f"Item embeddings shape: {item_embeddings.shape}")
+        embeddings_np = embeddings.cpu().numpy()
+        print(f"Item embeddings numpy shape: {embeddings_np.shape}")
+        np.save(output_path, embeddings_np)
 
-        item_embeddings_np = item_embeddings.cpu().numpy()
-        print(f"Item embeddings numpy shape: {item_embeddings_np.shape}")
-        np.save(output_path, item_embeddings_np)
-        np.savetxt("data/embeddings/book_embeddings.csv", item_embeddings_np, delimiter=",")
+        uniq = np.unique(embeddings_np, axis=0)
+        print(f"Unique vectors (pre-save): {uniq.shape[0]}, of total: {embeddings_np.shape[0]}")
 
-        uniq = np.unique(item_embeddings_np, axis=0)
-        print(f"Unique vectors (pre-save): {uniq.shape[0]}, of total: {item_embeddings_np.shape[0]}")
+    return graph.num_users
 
 
 def map_embeddings_to_id(map_file_path: str):
@@ -68,12 +63,11 @@ def map_embeddings_to_id(map_file_path: str):
         json.dump(unique_item_ids, f)
 
 
-def create_embedding_index(embeddings_path: str,mapping_path: str, index_path: str):
+def create_embedding_index(embeddings_path: str,mapping_path: str, index_path: str, num_users: int):
     # Load assets
     embeddings = np.load(embeddings_path)
     with open(mapping_path, "r") as f:
         book_id_map = json.load(f)
-    assert embeddings.shape[0] == len(book_id_map)
 
     dim = embeddings.shape[1]
     print(f"Loaded {embeddings.shape[0]} embeddings of size {dim} (dtype: {embeddings.dtype})")
@@ -87,24 +81,26 @@ def create_embedding_index(embeddings_path: str,mapping_path: str, index_path: s
     print(f"Post-normalization norms - min: {post_norm_norms.min():.10f}, max: {post_norm_norms.max():.10f}")
     print(f"Should all be ≈1.0. Std dev: {post_norm_norms.std():.10f}")
 
+    book_embeddings = embeddings[num_users:]
+
     # Build FAISS Index
     index_flat = faiss.IndexFlatIP(dim)
-    index_flat.add(embeddings)
+    index_flat.add(book_embeddings)
     print(f"FAISS CPU Index contains {index_flat.ntotal} vectors")
 
     # Save
     faiss.write_index(index_flat, index_path)
     print(f"FAISS index saved to {index_path}")
 
-    D, I = index_flat.search(embeddings[1:2], 20)
-    print(f"Dummy query (indices):    {I[0]}")
-    print(f"Dummy query (similarity): {D[0]}")
-    print(f"Mapped book IDs:          {[book_id_map[i] for i in I[0]]}")
+    D, I = index_flat.search(embeddings[1:2], 2330065)
+    print(f"Dummy query (indices):    {I[0][0:10]}")
+    print(f"Dummy query (similarity): {D[0][0:10]}")
+    print(f"Dummy query (worst):      {D[0][-10:]}")
 
-    D, I = index_flat.search(embeddings[100:101], 20)
-    print(f"Dummy query (indices):    {I[0]}")
-    print(f"Dummy query (similarity): {D[0]}")
-    print(f"Mapped book IDs:          {[book_id_map[i] for i in I[0]]}")
+    D, I = index_flat.search(embeddings[100:101], 2330065)
+    print(f"Dummy query (indices):    {I[0][0:10]}")
+    print(f"Dummy query (similarity): {D[0][0:10]}")
+    print(f"Dummy query (worst):      {D[0][-10:]}")
 
 
 def explore_embeddings():
@@ -130,18 +126,14 @@ def create_embeddings_and_index():
     user_mapping_file_path = "data/embeddings/user_id_map.json"
     index_file_path = "data/embeddings/books_faiss.index"
 
+    num_users = 0
     if not os.path.exists(file_path):
-        generate_embeddings(file_path)
+        num_users = generate_embeddings(file_path)
     else:
         print(f"Embeddings file already exists at {file_path}. Skipping generation.")
 
-    if not os.path.exists(book_mapping_file_path):
-        map_embeddings_to_id(book_mapping_file_path)
-    else:
-        print(f"Mapping file already exists at {book_mapping_file_path}. Skipping generation.")
-
     if not os.path.exists(index_file_path):
-        create_embedding_index(file_path, book_mapping_file_path, index_file_path)
+        create_embedding_index(file_path, book_mapping_file_path, index_file_path, num_users)
     else:
         print(f"Index file already exists at {index_file_path}. Skipping generation.")
 

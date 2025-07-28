@@ -181,5 +181,5 @@ def grid_search():
 
 if __name__ == "__main__":
     # grid_search()
-    train_model(layer_count=2, hidden_dim_count=32, embedding_dim_count=16, dropout_rate=0.25,
+    train_model(layer_count=2, hidden_dim_count=32, embedding_dim_count=32, dropout_rate=0.25,
                 learning_rate=0.001, optimizer_decay=1e-5, epochs=400, verbose=True)
