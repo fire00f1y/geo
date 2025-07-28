@@ -17,7 +17,9 @@ def generate_embeddings(output_path: str):
         num_layers=config["num_layers"],
         hidden_dim=config["hidden_dim"],
         embedding_dim=config["embedding_dim"],
-        dropout=config["dropout"]
+        dropout=config["dropout"],
+        num_users=config["num_users"],
+        num_books=config["num_books"],
     )
     gnn_model = gnn_model.cuda()
     gnn_model.load_state_dict(load_saved_graph())
@@ -78,10 +80,15 @@ def create_embedding_index(embeddings_path: str,mapping_path: str, index_path: s
 
     # L2-normalize
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    print(f"Embedding norms - min: {norms.min():.6f}, max: {norms.max():.6f}, mean: {norms.mean():.6f}")
     embeddings = embeddings / np.clip(norms, 1e-10, np.inf)
 
+    post_norm_norms = np.linalg.norm(embeddings, axis=1)
+    print(f"Post-normalization norms - min: {post_norm_norms.min():.10f}, max: {post_norm_norms.max():.10f}")
+    print(f"Should all be ≈1.0. Std dev: {post_norm_norms.std():.10f}")
+
     # Build FAISS Index
-    index_flat = faiss.IndexFlatIP(dim)  # inner product == cosine after L2 normalization
+    index_flat = faiss.IndexFlatIP(dim)
     index_flat.add(embeddings)
     print(f"FAISS CPU Index contains {index_flat.ntotal} vectors")
 
@@ -89,7 +96,12 @@ def create_embedding_index(embeddings_path: str,mapping_path: str, index_path: s
     faiss.write_index(index_flat, index_path)
     print(f"FAISS index saved to {index_path}")
 
-    D, I = index_flat.search(embeddings[0:1], 10)
+    D, I = index_flat.search(embeddings[1:2], 20)
+    print(f"Dummy query (indices):    {I[0]}")
+    print(f"Dummy query (similarity): {D[0]}")
+    print(f"Mapped book IDs:          {[book_id_map[i] for i in I[0]]}")
+
+    D, I = index_flat.search(embeddings[100:101], 20)
     print(f"Dummy query (indices):    {I[0]}")
     print(f"Dummy query (similarity): {D[0]}")
     print(f"Mapped book IDs:          {[book_id_map[i] for i in I[0]]}")

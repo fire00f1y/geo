@@ -1,6 +1,7 @@
 import time
 import json
 
+from torch import nn
 import numpy as np
 import polars as pl
 import torch
@@ -8,7 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from torch_geometric.data import Data
 
 
-def build_bipartite_graph(csv_path: str) -> Data:
+def build_bipartite_graph(csv_path: str, embedding_dim: int = 16) -> Data:
     """Build a bipartite graph from the sample dataset."""
 
     headers = ['user_id', 'book_id', 'rating', 'timestamp']
@@ -63,11 +64,19 @@ def build_bipartite_graph(csv_path: str) -> Data:
     print(f"Edge attribute shape: {edge_attr.shape}")
     print(f"Edge attribute example: {edge_attr[:5]}")
 
-    node_features = torch.zeros(num_users + num_books, 2)
-    node_features[:num_users, 0] = 1
-    node_features[num_users:, 1] = 1
-    print(f"Node features shape: {node_features.shape}")
-    print(f"Node features example: {node_features[:5]}")
+    # node_features = torch.zeros(num_users + num_books, 2)
+    # node_features[:num_users, 0] = 1
+    # node_features[num_users:, 1] = 1
+    # print(f"Node features shape: {node_features.shape}")
+    # print(f"Node features example: {node_features[:5]}")
+
+    # With node indices that identify each node:
+    node_indices = torch.arange(num_users + num_books, dtype=torch.long)
+    node_types = torch.zeros(num_users + num_books, dtype=torch.long)
+    node_types[num_users:] = 1  # 0 for users, 1 for books
+
+    # Stack them as features (index + type)
+    node_features = torch.stack([node_indices, node_types], dim=1)
 
     data = Data(
         x=node_features,

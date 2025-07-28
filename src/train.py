@@ -31,7 +31,9 @@ def train_model(layer_count: int, hidden_dim_count: int, dropout_rate: float, le
 
     node_features = graph.x.cuda()
     edge_indices = graph.edge_index.cuda()
-    gnn_model = SimpleRecGNN(input_dim=node_features.shape[1], num_layers=layer_count, hidden_dim=hidden_dim_count, embedding_dim=embedding_dim_count, dropout=dropout_rate)
+    gnn_model = SimpleRecGNN(input_dim=node_features.shape[1], num_layers=layer_count,
+                             hidden_dim=hidden_dim_count, embedding_dim=embedding_dim_count,
+                             dropout=dropout_rate, num_users=graph.num_users, num_books=graph.num_books)
     gnn_model = gnn_model.cuda()
 
     optimizer = torch.optim.Adam(gnn_model.parameters(), lr=learning_rate, weight_decay=optimizer_decay)
@@ -107,7 +109,7 @@ def train_model(layer_count: int, hidden_dim_count: int, dropout_rate: float, le
     if verbose:
         print(f"Completed in {duration:.2f} seconds.")
 
-    torch.save(gnn_model.state_dict(), "results/book_recs.pth")
+    torch.save(gnn_model.state_dict(), "models/book_recs.pth")
 
     import json
 
@@ -137,7 +139,7 @@ def train_model(layer_count: int, hidden_dim_count: int, dropout_rate: float, le
         "training_time": f"{duration:.2f}s",
     }
     gnn_model.config["training_metadata"] = training_metadata
-    with open(f"results/model_config.json", "w") as f:
+    with open(f"models/model_config.json", "w") as f:
         json.dump(gnn_model.config, f)
         f.write('\n')
 
@@ -179,5 +181,5 @@ def grid_search():
 
 if __name__ == "__main__":
     # grid_search()
-    train_model(layer_count=3, hidden_dim_count=32, embedding_dim_count=16, dropout_rate=0.25,
-                learning_rate=0.0015, optimizer_decay=1e-4, epochs=400, verbose=True)
+    train_model(layer_count=2, hidden_dim_count=32, embedding_dim_count=16, dropout_rate=0.25,
+                learning_rate=0.001, optimizer_decay=1e-5, epochs=400, verbose=True)
